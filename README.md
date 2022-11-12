@@ -172,6 +172,253 @@ The feature-first approach demands that we create a new folder for every new fea
 
 ## State Management with Riverpod
 
+Riverpod is one of most popular state management in Flutter. Riverpod is a reactive caching and data-binding framework that was born as an evolution of the Provider package.
+
+Riverpod is very versatile, and you can use it to:
+
+- catch programming errors at compile-time rather than at runtime
+- easily fetch, cache, and update data from a remote source
+- perform reactive caching and easily update your UI
+- depend on asynchronous or computed state
+- create, use, and combine providers with minimal boilerplate code
+- dispose the state of a provider when it is no longer used
+- write testable code and keep your logic outside the widget tree
+
+### Setup Riverpod
+
+In first need to add dependency `flutter_riverpod` in your flutter project.
+
+```dart
+flutter pub add flutter_riverpod
+```
+
+Once Riverpod is installed, we can wrap our root widget with a ProviderScope:
+
+```dart
+void main() {
+  // wrap the entire app with a ProviderScope so that widgets
+  // will be able to read providers
+  runApp(ProviderScope(
+    child: MyApp(),
+  ));
+}
+```
+
+### Create & Use Riverpod
+
+This is example a provider to provide `Hello World` data
+
+```dart
+// provider that returns a string value
+final helloWorldProvider = Provider<String>((ref) {
+  return 'Hello world';
+});
+```
+
+And this is a many different ways to consuming a provider of Riverpod.
+
+1. Using ConsumerWidget as alternative StatelessWidget
+
+```dart
+// 1. widget class now extends [ConsumerWidget]
+class HelloWorldWidget extends ConsumerWidget {
+  @override
+  // 2. build method has an extra [WidgetRef] argument
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 3. use ref.watch() to get the value of the provider
+    final helloWorld = ref.watch(helloWorldProvider);
+    return Text(helloWorld);
+  }
+}
+```
+
+2. Using Consumer Widget
+
+```dart
+class HelloWorldWidget extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    // 1. Add a Consumer
+    return Consumer(
+      // 2. specify the builder and obtain a WidgetRef
+      builder: (_, WidgetRef ref, __) {
+        // 3. use ref.watch() to get the value of the provider
+        final helloWorld = ref.watch(helloWorldProvider);
+        return Text(helloWorld);
+      },
+    );
+  }
+}
+```
+
+2. Using ConsumerStatefulWidget as alternative StatefulWidget
+
+```dart
+// 1. extend [ConsumerStatefulWidget]
+class HelloWorldWidget extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<HelloWorldWidget> createState() => _HelloWorldWidgetState();
+}
+
+// 2. extend [ConsumerState]
+class _HelloWorldWidgetState extends ConsumerState<HelloWorldWidget> {
+  @override
+  void initState() {
+    super.initState();
+    // 3. if needed, we can read the provider inside initState
+    final helloWorld = ref.read(helloWorldProvider);
+    print(helloWorld); // "Hello world"
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 4. use ref.watch() to get the value of the provider
+    final helloWorld = ref.watch(helloWorldProvider);
+    return Text(helloWorld);
+  }
+}
+```
+
+**What is a WidgetRef?**
+
+As we have seen, we can watch a provider's value by using a ref object of type WidgetRef. This is available as an argument when we use Consumer or `ConsumerWidget`, and as a property when we subclass from ConsumerState.
+
+The Riverpod documentation defines WidgetRef as an object that allows widgets to interact with providers.
+
+Note that there are some similarities between BuildContext and `WidgetRef`:
+
+- BuildContext lets us access ancestor widgets in the widget tree (such as `Theme.of(context)` and `MediaQuery.of(context))`
+- WidgetRef lets us access any provider inside our app
+
+In other words, `WidgetRef` lets us access any provider in our codebase (as long as we import the corresponding file). This is by design because all Riverpod providers are global.
+
+#### Different Kind of Provider in Riverpod
+
+Riverpod offers eight different kinds of providers, all suited for separate use cases:
+
+1. Provider
+1. StateProvider (legacy)
+1. StateNotifierProvider (legacy)
+1. FutureProvider
+1. StreamProvider
+1. ChangeNotifierProvider (legacy)
+1. NotifierProvider (new in Riverpod 2.0)
+1. AsyncNotifierProvider (new in Riverpod 2.0)
+
+#### AutoDispose Modifier
+
+If we're working with FutureProvider or StreamProvider, we'll want to dispose of any listeners when our provider is no longer in use.
+
+We can do this by adding an autoDispose modifier to our provider:
+
+```dart
+final authStateChangesProvider = StreamProvider.autoDispose<User?>((ref) {
+  // get FirebaseAuth from another provider
+  final firebaseAuth = ref.watch(firebaseAuthProvider);
+  // call method that returns a Stream<User?>
+  return firebaseAuth.authStateChanges();
+});
+```
+
+#### Caching with Timeout
+
+If desired, we can call `ref.keepAlive()` to preserve the state so that the request won't fire again if the user leaves and re-enters the same screen:
+
+```dart
+final movieProvider = FutureProvider.autoDispose<TMDBMovieBasic>((ref) async {
+  // get the repository
+  final moviesRepo = ref.watch(fetchMoviesRepositoryProvider);
+  // an object from package:dio that allows cancelling http requests
+  final cancelToken = CancelToken();
+  // when the provider is destroyed, cancel the http request
+  ref.onDispose(() => cancelToken.cancel());
+  // if the request is successful, keep the response
+  ref.keepAlive();
+  // call method that returns a Future<TMDBMovieBasic>
+  return moviesRepo.movie(movieId: 550, cancelToken: cancelToken);
+});
+```
+
+#### Family Modifier
+
+`.family` is a modifier that we can use to pass an argument to a provider.
+
+It works by adding a second type annotation and an additional parameter that we can use inside the provider body:
+
+```dart
+final movieProvider = FutureProvider.autoDispose
+    // additional movieId argument of type int
+    .family<TMDBMovieBasic, int>((ref, movieId) async {
+  // get the repository
+  final moviesRepo = ref.watch(fetchMoviesRepositoryProvider);
+  // call method that returns a Future<TMDBMovieBasic>, passing the movieId as an argument
+  return moviesRepo.movie(movieId: movieId, cancelToken: cancelToken);
+});
+```
+
+Then, we can just pass the value we want to the provider when we call `ref.watch` in the build method:
+
+```dart
+final movieAsync = ref.watch(movieProvider(550));
+```
+
+#### When to use ref.read or ref.watch
+
+In the examples above, have encountered two ways of reading providers: ref.read and ref.watch.
+
+To get the value of a provider inside a build method, have always used ref.watch. This ensures that if the provider value changes, rebuild the widgets that depend on it.
+
+But there are cases when shouldn't use ref.watch.
+
+Example:
+```dart
+final counterStateProvider = StateProvider<int>((_) => 0);
+
+class CounterWidget extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 1. watch the provider and rebuild when the value changes
+    final counter = ref.watch(counterStateProvider);
+    return ElevatedButton(
+      // 2. use the value
+      child: Text('Value: $counter'),
+      // 3. change the state inside a button callback
+      onPressed: () => ref.read(counterStateProvider.notifier).state++,
+    );
+  }
+}
+```
+
+#### Listen Provider Scope Changes
+
+Sometimes we want to show an alert dialog or a SnackBar when a provider state changes.
+
+We can do this by calling `ref.listen()` inside the `build` method:
+
+```dart
+class CounterWidget extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // if we use a StateProvider<T>, the type of the previous and current 
+    // values is StateController<T>
+    ref.listen<StateController<int>>(counterStateProvider.state, (previous, current) {
+      // note: this callback executes when the provider value changes,
+      // not when the build method is called
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Value is ${current.state}')),
+      );
+    });
+    // watch the provider and rebuild when the value changes
+    final counter = ref.watch(counterStateProvider);
+    return ElevatedButton(
+      // use the value
+      child: Text('Value: $counter'),
+      // change the state inside a button callback
+      onPressed: () => ref.read(counterStateProvider.notifier).state++,
+    );
+  }
+}
+```
 
 ## Automated Testing
 
@@ -184,3 +431,4 @@ The feature-first approach demands that we create a new folder for every new fea
 - [Complete Flutter Course Bundle](https://codewithandrea.com/courses/complete-flutter-bundle/)
 - [GoRouter](https://pub.dev/packages/go_router)
 - [Riverpod](https://riverpod.dev/)
+- [Flutter Riverpod Ultimate Guide](https://codewithandrea.com/articles/flutter-state-management-riverpod)
