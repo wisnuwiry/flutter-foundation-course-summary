@@ -129,7 +129,7 @@ Each of these layers has its own responsibility and there's a clear contract for
 
 This is example project structure feature first and layer first.
 
-#### Layer First (Feature inside layer)
+### Layer First (Feature inside layer)
 
 With this approach, we can add all the relevant Dart files inside each feature folder, ensuring that they belong to the correct layer (widgets and controllers inside presentation, models inside domain, etc.).
 
@@ -150,7 +150,7 @@ With this approach, we can add all the relevant Dart files inside each feature f
       ‣ feature2
 ```
 
-#### Feature First
+### Feature First
 
 The feature-first approach demands that we create a new folder for every new feature that we add to our app. And inside that folder, we can add the layers themselves as sub-folders.
 
@@ -292,7 +292,7 @@ Note that there are some similarities between BuildContext and `WidgetRef`:
 
 In other words, `WidgetRef` lets us access any provider in our codebase (as long as we import the corresponding file). This is by design because all Riverpod providers are global.
 
-#### Different Kind of Provider in Riverpod
+### Different Kind of Provider in Riverpod
 
 Riverpod offers eight different kinds of providers, all suited for separate use cases:
 
@@ -305,7 +305,7 @@ Riverpod offers eight different kinds of providers, all suited for separate use 
 1. NotifierProvider (new in Riverpod 2.0)
 1. AsyncNotifierProvider (new in Riverpod 2.0)
 
-#### AutoDispose Modifier
+### AutoDispose Modifier
 
 If we're working with FutureProvider or StreamProvider, we'll want to dispose of any listeners when our provider is no longer in use.
 
@@ -320,7 +320,7 @@ final authStateChangesProvider = StreamProvider.autoDispose<User?>((ref) {
 });
 ```
 
-#### Caching with Timeout
+### Caching with Timeout
 
 If desired, we can call `ref.keepAlive()` to preserve the state so that the request won't fire again if the user leaves and re-enters the same screen:
 
@@ -339,7 +339,7 @@ final movieProvider = FutureProvider.autoDispose<TMDBMovieBasic>((ref) async {
 });
 ```
 
-#### Family Modifier
+### Family Modifier
 
 `.family` is a modifier that we can use to pass an argument to a provider.
 
@@ -362,7 +362,7 @@ Then, we can just pass the value we want to the provider when we call `ref.watch
 final movieAsync = ref.watch(movieProvider(550));
 ```
 
-#### When to use ref.read or ref.watch
+### When to use ref.read or ref.watch
 
 In the examples above, have encountered two ways of reading providers: ref.read and ref.watch.
 
@@ -389,7 +389,7 @@ class CounterWidget extends ConsumerWidget {
 }
 ```
 
-#### Listen Provider Scope Changes
+### Listen Provider Scope Changes
 
 Sometimes we want to show an alert dialog or a SnackBar when a provider state changes.
 
@@ -422,13 +422,240 @@ class CounterWidget extends ConsumerWidget {
 
 ## Automated Testing
 
+Reasons for needing to write testing:
+
+- Ensure app works as intended
+- Catch bugs early during development (when they are cheaper to fix)
+- Avoid regressions when making changes
+- Refactor with confidence
+- Help us write better code in the first place
+- Save a lot of time (compared to manual tests)
+
+Test pyramid
+
+![](https://www.filepicker.io/api/file/nnZI33GbTbep3rYPcfeR)
+
+### Unit Testing
+
+These are generally used to test a single function, method or class. And this makes them useful for testing things like repositories, data models, services and controllers in isolation.
+
+They are very fast (when done properly).
+
+### Widget Test
+
+Normally used to test a single widget.
+
+Widget tests are quite fast, because they don't need to run on a real device or simulator, and we will cover them more in detail in the next section.
+
+
+### Integration Test
+
+Normally used to test a complete app or a large part of the app.
+
+Integration tests run on a real device or simulator. They take longer to start and complete. As a result, we normally have far fewer integration tests than we have widget tests.
+
+Note: integration tests are not supposed to talk to a real backend.
+
+### E2E
+
+Used to test both the front-end and the back-end of our application, giving us an idea if the system as a whole is working as intended.
+
+They are more difficult to setup, and more difficult to maintain as well because they depend on external factors such as network connectivity.
+
+
+### Manual Test
+
+Need to performed by a human rather than a computer.
+
+This makes them slower. But they are still very valuable, since only humans can tell when "something doesn't seem quite right".
+
+### Testing in Flutter
+
+To test in Flutter you need the [flutter_test](https://pub.dev/packages/flutter_test) dependency.
+
+And if you need mocking, you need a dependency [mocktail](https://pub.dev/packages/mocktail).
+
+
+Example unit test:
+
+```dart
+test('getProduct(100) returns null', () {
+  final productsRepository = SomeRepository();
+  expect(
+    productsRepository.getProduct('100'),
+    null,
+  );
+});
+```
+Make better your unit test, with implement grouping test base on context testing. 
+
+Example:
+
+```dart
+group('FakeProductsRepository', () {
+    test('getProduct(100) returns null', () {
+        final productsRepository = SomeRepository();
+        expect(
+            productsRepository.getProduct('100'),
+            null,
+        );
+    });
+});
+```
+
+Example testing with mocking dependency:
+
+```dart
+import 'package:mocktail/mocktail.dart';
+
+class MockAuthRepository extends Mock implements AuthRepository {}
+
+
+test('signInAnonymously succeeds', () async {
+  // setup
+  final authRepository = MockAuthRepository();
+  // stub -> success
+  when(authRepository.signInAnonymously).thenAnswer(
+    (_) => Future.value(),
+  );
+  final controller = SignInScreenController(authRepository: authRepository);
+  // run
+  await controller.signInAnonymously();
+  // verify
+  verify(authRepository.signInAnonymously).called(1);
+  expect(controller.debugState, const AsyncData<void>(null));
+});
+```
+
+Example widget test:
+
+```dart
+testWidgets('Cancel logout', (tester) async {
+    // pump
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: AccountScreen(),
+        ),
+      ),
+    );
+    // find logout button and tap it
+    final logoutButton = find.text('Logout');
+    expect(logoutButton, findsOneWidget);
+    await tester.tap(logoutButton);
+    await tester.pump();
+
+    // expect that the logout dialog is presented
+    final dialogTitle = find.text('Are you sure?');
+    expect(dialogTitle, findsOneWidget);
+
+    // find cancel button and tap it
+    final cancelButton = find.text('Cancel');
+    expect(cancelButton, findsOneWidget);
+    await tester.tap(cancelButton);
+    await tester.pump();
+
+    // expect that the logout dialog is no longer visible
+    expect(dialogTitle, findsNothing);
+  });
+```
+
+**Robot Testing**: 
+
+With Robot Testing, we gain confidence in the product because the engineers have control of the tests and can guarantee that they are written correctly. In addition, the tests are readable and understandable by non-technical stakeholders and teammates outside of the engineering team.
+
+Another big benefit of robot tests is that since there are specific segmented “robots” or “tests” for specific components, the tests themselves can be reused and maintained as the project and codebase grows.
+
+Example:
+
+```dart
+class AuthRobot {
+  ...
+
+  Future<void> tapLogoutButton() async {
+    final logoutButton = find.text('Logout');
+    expect(logoutButton, findsOneWidget);
+    await tester.tap(logoutButton);
+    await tester.pump();
+  }
+
+  void expectLogoutDialogFound() {
+    final dialogTitle = find.text('Are you sure?');
+    expect(dialogTitle, findsOneWidget);
+  }
+
+  Future<void> tapCancelButton() async {
+    final cancelButton = find.text('Cancel');
+    expect(cancelButton, findsOneWidget);
+    await tester.tap(cancelButton);
+    await tester.pump();
+  }
+
+  void expectLogoutDialogNotFound() {
+    final dialogTitle = find.text('Are you sure?');
+    expect(dialogTitle, findsNothing);
+  }
+}
+```
+
+```dart
+void main() {
+  testWidgets('Cancel logout', (tester) async {
+    final r = AuthRobot(tester);
+    await r.pumpAccountScreen();
+    await r.tapLogoutButton();
+    r.expectLogoutDialogFound();
+    await r.tapCancelButton();
+    r.expectLogoutDialogNotFound();
+  });
+}
+```
 
 ## Error Handling
 
+Error handling is an important, because if your app doesn't behave correctly, then users may become frustrated, leave poor reviews, and stop using your product.
 
+### Error vs Exception
+
+**Error**: An error is a programmer mistake telling us that we did something wrong, and it is our job to address it by fixing our code.
+
+**Exception**: An exception is some failure condition telling us that something unexpected happened (out of our control).
+
+When using Riverpod any exceptions will be caught by the call to `AsyncValue.guard`.
+
+```dart
+Future<bool> submit(String email, String password) async {
+    state = state.copyWith(value: const AsyncValue.loading());
+    final value = await AsyncValue.guard(
+        // this calls methods in the FakeAuthRepository
+        () => _authenticate(email, password)
+    );
+    state = state.copyWith(value: value);
+    return value.hasError == false;
+}
+```
+
+Create subclass exception is good alternative to define exception specifically:
+
+```dart
+/// Base class for all all client-side errors that can be generated by the app
+class BaseAppException implements Exception {
+  BaseAppException(this.code, this.message);
+  final String code;
+  final String message;
+}
+
+class ParseOrderFailureException extends BaseAppException {
+  ParseOrderFailureException(this.status)
+      : super('parse-order-failure',
+            'Could not parse order status: $status'.hardcoded);
+  final String status;
+}
+```
 
 ### References
 - [Complete Flutter Course Bundle](https://codewithandrea.com/courses/complete-flutter-bundle/)
 - [GoRouter](https://pub.dev/packages/go_router)
 - [Riverpod](https://riverpod.dev/)
 - [Flutter Riverpod Ultimate Guide](https://codewithandrea.com/articles/flutter-state-management-riverpod)
+- [Robot Testing](https://verygood.ventures/blog/robot-testing-in-flutter)
